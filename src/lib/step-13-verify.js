@@ -673,8 +673,12 @@ function runFallbackChecks(projectPath) {
   // its absence is a benign not-applicable, never a failure.
 
   // Lint checks
+  // A project-declared `gate` script picks its own checks from what the change touches (lint,
+  // types, tests, build). It runs as ONE required check that stands for lint, types and tests, so
+  // `npm run lint`, `npm run typecheck` and the whole `npm test` are not run beside it.
+  const hasGate = hasPackageJson && npmScriptExists(pkg, 'gate');
   const lintCommands = [];
-  if (hasPackageJson && npmScriptExists(pkg, 'lint')) lintCommands.push({ cmd: 'npm run lint', required: true });
+  if (hasPackageJson && !hasGate && npmScriptExists(pkg, 'lint')) lintCommands.push({ cmd: 'npm run lint', required: true });
   if (hasPyproject && toolExists('ruff', projectPath)) lintCommands.push('ruff check .');
   if (hasGoMod && toolExists('golangci-lint', projectPath)) lintCommands.push('golangci-lint run');
   if (hasCargoToml && toolExists('cargo', projectPath)) lintCommands.push('cargo clippy');
@@ -682,14 +686,15 @@ function runFallbackChecks(projectPath) {
 
   // Type check
   const typeCommands = [];
-  if (hasPackageJson && npmScriptExists(pkg, 'typecheck')) typeCommands.push({ cmd: 'npm run typecheck', required: true });
+  if (hasPackageJson && !hasGate && npmScriptExists(pkg, 'typecheck')) typeCommands.push({ cmd: 'npm run typecheck', required: true });
   if (hasPyproject && toolExists('mypy', projectPath)) typeCommands.push('mypy .');
   if (hasGoMod && toolExists('go', projectPath)) typeCommands.push('go vet ./...');
   checks.types = evalCategory('Type check', typeCommands, projectPath, errors);
 
   // Test suite
   const testCommands = [];
-  if (hasPackageJson && npmScriptExists(pkg, 'test')) testCommands.push({ cmd: 'npm test', required: true });
+  if (hasGate) testCommands.push({ cmd: 'npm run gate', required: true });
+  if (hasPackageJson && !hasGate && npmScriptExists(pkg, 'test')) testCommands.push({ cmd: 'npm test', required: true });
   if (hasPyproject && toolExists('pytest', projectPath)) testCommands.push('pytest');
   if (hasGoMod && toolExists('go', projectPath)) testCommands.push('go test ./...');
   if (hasCargoToml && toolExists('cargo', projectPath)) testCommands.push('cargo test');
